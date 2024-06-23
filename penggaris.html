@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Penggaris Digital</title>
+    <style>
+        video {
+            max-width: 100%;
+            border: 1px solid black;
+            display: block;
+            margin: 0 auto;
+        }
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        #resetButton {
+            display: block;
+            margin: 10px auto;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center;">Penggaris Digital</h1>
+    <video id="videoElement" autoplay></video>
+    <canvas id="canvas"></canvas>
+    <button id="resetButton">Reset</button>
+    <p style="text-align: center;">Klik pada video untuk menentukan Node</p>
+    <p style="text-align: center;">Total Node: <span id="nodeCount">0</span></p>
+    <p style="text-align: center;">Jarak Total: <span id="totalDistance">-</span> cm</p>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const video = document.getElementById('videoElement');
+            const canvas = document.getElementById('canvas');
+            const resetButton = document.getElementById('resetButton');
+            const nodeCountDisplay = document.getElementById('nodeCount');
+            const totalDistanceDisplay = document.getElementById('totalDistance');
+            const ctx = canvas.getContext('2d');
+            let stream = null;
+            let nodes = [];
+            let cursorX = 0;
+            let cursorY = 0;
+            let isFirstClick = true;
+
+            // Mengambil izin akses kamera
+            navigator.mediaDevices.getUserMedia({ video: true })
+                .then(function (mediaStream) {
+                    stream = mediaStream;
+                    video.srcObject = mediaStream;
+                })
+                .catch(function (err) {
+                    console.log("Tidak dapat mengakses kamera: " + err);
+                });
+
+            // Ketika video siap
+            video.addEventListener('loadedmetadata', function() {
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+
+                video.addEventListener('click', function(event) {
+                    const rect = video.getBoundingClientRect();
+                    const x = event.clientX - rect.left;
+                    const y = event.clientY - rect.top;
+
+                    if (isFirstClick) {
+                        // Menyimpan koordinat klik sebagai titik node pertama
+                        nodes.push({ x, y });
+
+                        // Gambar titik merah untuk node pertama
+                        ctx.beginPath();
+                        ctx.arc(x, y, 5, 0, Math.PI * 2);
+                        ctx.fillStyle = 'red';
+                        ctx.fill();
+
+                        isFirstClick = false; // Ubah flag menjadi false setelah klik pertama
+                    } else {
+                        // Menyimpan koordinat klik sebagai titik node kedua dan seterusnya
+                        nodes.push({ x, y });
+
+                        // Gambar titik merah untuk node baru
+                        ctx.beginPath();
+                        ctx.arc(x, y, 5, 0, Math.PI * 2);
+                        ctx.fillStyle = 'red';
+                        ctx.fill();
+
+                        // Gambar garis kuning antara node sebelumnya dan node baru
+                        const prevNode = nodes[nodes.length - 2];
+                        ctx.beginPath();
+                        ctx.moveTo(prevNode.x, prevNode.y);
+                        ctx.lineTo(x, y);
+                        ctx.strokeStyle = 'yellow';
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+
+                        // Update tampilan jarak total
+                        if (nodes.length > 1) {
+                            updateDistances(nodes.length - 2); // Hitung jarak dari node sebelumnya
+                        }
+                    }
+
+                    // Update total node
+                    nodeCountDisplay.textContent = nodes.length;
+                });
+
+                video.addEventListener('mousemove', function(event) {
+                    const rect = video.getBoundingClientRect();
+                    cursorX = event.clientX - rect.left;
+                    cursorY = event.clientY - rect.top;
+
+                    // Hapus titik hijau sebelumnya
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                    // Gambar titik hijau untuk cursor penanda
+                    ctx.beginPath();
+                    ctx.arc(cursorX, cursorY, 5, 0, Math.PI * 2);
+                    ctx.fillStyle = 'green';
+                    ctx.fill();
+
+                    // Gambar ulang semua node yang telah ditentukan
+                    nodes.forEach(node => {
+                        ctx.beginPath();
+                        ctx.arc(node.x, node.y, 5, 0, Math.PI * 2);
+                        ctx.fillStyle = 'red';
+                        ctx.fill();
+                    });
+
+                    // Gambar ulang semua garis yang menghubungkan node-node
+                    for (let i = 1; i < nodes.length; i++) {
+                        const node1 = nodes[i - 1];
+                        const node2 = nodes[i];
+                        ctx.beginPath();
+                        ctx.moveTo(node1.x, node1.y);
+                        ctx.lineTo(node2.x, node2.y);
+                        ctx.strokeStyle = 'yellow';
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
+                    }
+                });
+            });
+
+            // Tombol reset untuk menghapus semua node dan reset tampilan
+            resetButton.addEventListener('click', function() {
+                nodes = [];
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                nodeCountDisplay.textContent = '0';
+                totalDistanceDisplay.textContent = '-';
+                isFirstClick = true; // Set flag isFirstClick kembali ke true setelah reset
+            });
+
+            // Fungsi untuk menghitung jarak dari node ke node sebelumnya
+            function updateDistances(index) {
+                const node1 = nodes[index];
+                const node2 = nodes[index + 1];
+                const distance = calculateDistance(node1, node2);
+
+                // Gambar garis kuning antara node1 dan node2
+                ctx.beginPath();
+                ctx.moveTo(node1.x, node1.y);
+                ctx.lineTo(node2.x, node2.y);
+                ctx.strokeStyle = 'yellow';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Update tampilan jarak total
+                if (nodes.length > 1) {
+                    let totalDistance = 0;
+                    for (let i = 0; i < nodes.length - 1; i++) {
+                        totalDistance += calculateDistance(nodes[i], nodes[i + 1]);
+                    }
+                    totalDistanceDisplay.textContent = totalDistance.toFixed(2) + ' cm';
+                }
+            }
+
+            // Fungsi untuk menghitung jarak antara dua titik
+            function calculateDistance(node1, node2) {
+                const deltaX = node2.x - node1.x;
+                const deltaY = node2.y - node1.y;
+                const distanceInPixels = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+                // Mengonversi ke cm (asumsi faktor konversi pixel ke cm)
+                const pixelsPerCm = 10; // Contoh, ini bisa disesuaikan dengan faktor kalibrasi
+                const distanceInCm = distanceInPixels / pixelsPerCm;
+
+                return distanceInCm;
+            }
+
+            // Hentikan akses kamera saat keluar dari halaman
+            window.addEventListener('beforeunload', function() {
+                if (stream) {
+                    stream.getVideoTracks().forEach(track => track.stop());
+                }
+            });
+        });
+    </script>
+</body>
+</html>
